@@ -1,0 +1,3 @@
+#!/usr/bin/fish
+
+git b | rg '\[gone\]' | awk \{'print $1'\}
