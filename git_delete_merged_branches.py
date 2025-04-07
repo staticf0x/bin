@@ -4,7 +4,6 @@
 import argparse
 import re
 import subprocess
-from typing import List
 
 from rich import print as rprint
 
@@ -36,14 +35,36 @@ def get_current_branch() -> str:
     return output.stdout.decode("ascii").strip()
 
 
-def get_merged_branches() -> List[str]:
-    # Get output from git-find-merged-branches
+def get_all_remote_branches() -> list[str]:
     output = subprocess.run(
-        ["git", "find-merged-branches"], shell=False, check=True, stdout=subprocess.PIPE
+        ["git", "branch", "-r"], shell=False, check=True, stdout=subprocess.PIPE
     )
     output_str = output.stdout.decode("ascii")
 
-    return output_str.strip().split("\n")
+    branches = [line.strip() for line in output_str.strip().split("\n")]
+    branches = [branch for branch in branches if "->" not in branch]
+    branches = [
+        branch.removeprefix("origin/")
+        for branch in branches
+        if branch.startswith("origin")
+    ]
+    branches = [branch for branch in branches if branch not in ("main", "master")]
+
+    return set(branches)
+
+
+def get_all_local_branches() -> list[str]:
+    output = subprocess.run(
+        ["git", "branch"], shell=False, check=True, stdout=subprocess.PIPE
+    )
+    output_str = output.stdout.decode("ascii")
+
+    branches = [line.strip() for line in output_str.strip().split("\n")]
+    branches = [branch.removeprefix("* ") for branch in branches]
+    branches = [branch.split()[0] for branch in branches]
+    branches = [branch for branch in branches if branch not in ("main", "master")]
+
+    return set(branches)
 
 
 if __name__ == "__main__":
@@ -66,12 +87,11 @@ if __name__ == "__main__":
 
     if args.f:
         # First, call git fetch --prune
-        subprocess.run(["git", "fetch", "--prune"], shell=False, check=True)
+        subprocess.run(["git", "fetch", "--all", "--prune"], shell=False, check=True)
 
-    for branch in get_merged_branches():
-        if not branch:
-            continue
+    merged_branches = get_all_local_branches() - get_all_remote_branches()
 
+    for branch in merged_branches:
         rprint(
             f"Branch [bold yellow]{branch}[/bold yellow] seems to be deleted in remote"
         )
@@ -83,7 +103,7 @@ if __name__ == "__main__":
                 rprint(f"  Link:     [bold green]{JIRA_URL}{issue_id}[/bold green]")
 
         rprint(
-            f"  Delete [bold underline]local[/bold underline] branch [bold red]{branch}[/bold red]? \[y/N] ",
+            rf"  Delete [bold underline]local[/bold underline] branch [bold red]{branch}[/bold red]? \[y/N] ",
             end="",
         )
         ans = input().lower()
